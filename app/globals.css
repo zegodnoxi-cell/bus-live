@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  overflow: hidden;
+}
+
+.map-shell {
+  width: 100%;
+  height: 100%;
+  background: #f3f4f4;
+}
+
+.maplibregl-map {
+  width: 100%;
+  height: 100%;
+  background: #f3f4f4;
+  font-family: var(--font-geist-sans), sans-serif;
+}
+
+.maplibregl-ctrl-attrib {
+  font-size: 10px;
+  color: #697277;
+  background: rgb(243 244 244 / 78%);
+}
+
+.maplibregl-canvas {
+  filter: saturate(0.72) brightness(1.03) contrast(0.96);
+}

@@ -1,0 +1,1346 @@
+const phoneScreen =
+  document.getElementById("phone-screen");
+
+const otpScreen =
+  document.getElementById("otp-screen");
+
+const locationScreen =
+  document.getElementById("location-screen");
+
+
+const phoneInput =
+  document.getElementById("phone-number");
+
+const otpSubmit =
+  document.getElementById("otp-submit");
+
+const locationButton =
+  document.getElementById("location-button");
+
+
+const otpBoxes = [
+
+  document.getElementById("otp-1"),
+
+  document.getElementById("otp-2"),
+
+  document.getElementById("otp-3"),
+
+  document.getElementById("otp-4")
+
+];
+
+
+const searchBar =
+  document.getElementById("search-bar");
+
+const zoomControl =
+  document.getElementById("zoom-control");
+
+const infoButton =
+  document.getElementById("info-button");
+
+
+// ============================================================
+// INITIAL UI STATE
+// ============================================================
+
+searchBar.style.display = "none";
+
+zoomControl.style.display = "none";
+
+
+// ============================================================
+// OTP INPUT BEHAVIOUR
+// ============================================================
+
+otpBoxes.forEach(
+  function (box, index) {
+
+    box.addEventListener(
+      "input",
+      function () {
+
+        let value =
+          box.value
+            .replace(/\D/g, "");
+
+
+        // --------------------------------------------------------
+        // MOBILE OTP AUTOFILL / MULTI-DIGIT INPUT
+        // --------------------------------------------------------
+        // Some mobile browsers may insert the complete OTP
+        // into the first field. Distribute those digits across
+        // the four OTP boxes.
+        // --------------------------------------------------------
+
+        if (value.length > 1) {
+
+          const digits =
+            value.slice(0, 4);
+
+
+          otpBoxes.forEach(
+            function (otpBox) {
+
+              otpBox.value = "";
+
+            }
+          );
+
+
+          digits
+            .split("")
+            .forEach(
+              function (digit, digitIndex) {
+
+                if (
+                  otpBoxes[digitIndex]
+                ) {
+
+                  otpBoxes[digitIndex].value =
+                    digit;
+
+                }
+
+              }
+            );
+
+
+          const lastIndex =
+            Math.min(
+              digits.length - 1,
+              otpBoxes.length - 1
+            );
+
+
+          otpBoxes[lastIndex].focus();
+
+          return;
+
+        }
+
+
+        // --------------------------------------------------------
+        // NORMAL SINGLE-DIGIT INPUT
+        // --------------------------------------------------------
+
+        box.value =
+          value.slice(0, 1);
+
+
+        if (
+          box.value !== "" &&
+          index < otpBoxes.length - 1
+        ) {
+
+          otpBoxes[index + 1].focus();
+
+        }
+
+      }
+    );
+
+
+    // ==========================================================
+    // KEYBOARD BEHAVIOUR
+    // ==========================================================
+
+    box.addEventListener(
+      "keydown",
+      function (event) {
+
+        // Backspace → previous box
+        if (
+          event.key === "Backspace" &&
+          box.value === "" &&
+          index > 0
+        ) {
+
+          otpBoxes[index - 1].focus();
+
+        }
+
+
+        // Enter → verify
+        if (
+          event.key === "Enter"
+        ) {
+
+          event.preventDefault();
+
+          handleOTP();
+
+        }
+
+      }
+    );
+
+
+    // ==========================================================
+    // PASTE BEHAVIOUR
+    // ==========================================================
+
+    box.addEventListener(
+      "paste",
+      function (event) {
+
+        event.preventDefault();
+
+
+        const pasted =
+          (
+            event.clipboardData ||
+            window.clipboardData
+          )
+            .getData("text")
+            .replace(/\D/g, "")
+            .slice(0, 4);
+
+
+        if (!pasted) {
+
+          return;
+
+        }
+
+
+        otpBoxes.forEach(
+          function (otpBox) {
+
+            otpBox.value = "";
+
+          }
+        );
+
+
+        pasted
+          .split("")
+          .forEach(
+            function (digit, digitIndex) {
+
+              if (
+                otpBoxes[digitIndex]
+              ) {
+
+                otpBoxes[digitIndex].value =
+                  digit;
+
+              }
+
+            }
+          );
+
+
+        const lastIndex =
+          Math.min(
+            pasted.length - 1,
+            otpBoxes.length - 1
+          );
+
+
+        otpBoxes[lastIndex].focus();
+
+      }
+    );
+
+  }
+);
+
+
+// ============================================================
+// OTP SUBMIT
+// ============================================================
+
+otpSubmit.addEventListener(
+  "click",
+  handleOTP
+);
+
+
+// ============================================================
+// FAKE OTP HANDLER
+// ============================================================
+
+function handleOTP() {
+
+  let otp = "";
+
+
+  otpBoxes.forEach(
+    function (box) {
+
+      otp += box.value;
+
+    }
+  );
+
+
+  /*
+    FAKE OTP
+
+    Any 4 digits are accepted.
+  */
+
+  if (
+    !/^\d{4}$/.test(otp)
+  ) {
+
+    // Focus the first empty box.
+    for (
+      let i = 0;
+      i < otpBoxes.length;
+      i++
+    ) {
+
+      if (
+        otpBoxes[i].value === ""
+      ) {
+
+        otpBoxes[i].focus();
+
+        break;
+
+      }
+
+    }
+
+    return;
+
+  }
+
+
+  console.log(
+    "OTP ACCEPTED:",
+    otp
+  );
+
+
+  // ------------------------------------------------------------
+  // MOVE FROM OTP → LOCATION PERMISSION SCREEN
+  // ------------------------------------------------------------
+
+  otpScreen.classList.add(
+    "hidden"
+  );
+
+
+  locationScreen.classList.remove(
+    "hidden"
+  );
+
+}
+
+
+// ============================================================
+// MAP CONSTANTS
+// ============================================================
+
+
+const FALLBACK_LOCATION = [
+  76.30348,
+  10.0098
+];
+
+
+const DEFAULT_ZOOM = 18;
+
+const DEFAULT_PITCH = 30;
+
+const DEFAULT_BEARING = 0;
+
+
+// ============================================================
+// LOCATION STATE
+// ============================================================
+
+let userCoordinates =
+  [...FALLBACK_LOCATION];
+
+let currentLocationMarker =
+  null;
+
+let locationWatchId =
+  null;
+
+
+// ============================================================
+// MAP INITIALIZATION
+// ============================================================
+
+const map =
+  new maplibregl.Map({
+
+    container: "map",
+
+    style:
+      "https://tiles.openfreemap.org/styles/bright",
+
+    center:
+      FALLBACK_LOCATION,
+
+    zoom:
+      DEFAULT_ZOOM,
+
+    pitch:
+      DEFAULT_PITCH,
+
+    bearing:
+      DEFAULT_BEARING,
+
+    minZoom:
+      14,
+
+    maxZoom:
+      20,
+
+    maxPitch:
+      65,
+
+    dragPan:
+      true,
+
+    dragRotate:
+      true,
+
+    touchPitch:
+      true,
+
+    touchZoomRotate:
+      true,
+
+    attributionControl:
+      true
+
+  });
+
+
+window.map = map;
+
+
+// ============================================================
+// LOCATION MARKER
+// ============================================================
+
+function createLocationMarker(
+  coordinates
+) {
+
+  if (
+    currentLocationMarker
+  ) {
+
+    currentLocationMarker.remove();
+
+  }
+
+
+  const element =
+    document.createElement("div");
+
+  element.className =
+    "current-location-marker";
+
+
+  const arrow =
+    document.createElement("div");
+
+  arrow.className =
+    "current-location-arrow";
+
+
+  element.appendChild(
+    arrow
+  );
+
+
+  currentLocationMarker =
+    new maplibregl.Marker({
+
+      element:
+        element,
+
+      anchor:
+        "center"
+
+    })
+      .setLngLat(
+        coordinates
+      )
+      .addTo(map);
+
+}
+
+
+// ============================================================
+// UPDATE USER LOCATION
+// ============================================================
+
+function updateUserLocation(
+  latitude,
+  longitude
+) {
+
+  userCoordinates = [
+    longitude,
+    latitude
+  ];
+
+
+  if (
+    currentLocationMarker
+  ) {
+
+    currentLocationMarker.setLngLat(
+      userCoordinates
+    );
+
+  }
+
+  else {
+
+    createLocationMarker(
+      userCoordinates
+    );
+
+  }
+
+}
+
+
+// ============================================================
+// SHOW MAP UI
+// ============================================================
+
+function showMapUI() {
+
+  searchBar.style.display =
+    "flex";
+
+  zoomControl.style.display =
+    "flex";
+
+  map.resize();
+
+}
+
+
+// ============================================================
+// LOCATION BUTTON
+// ============================================================
+
+locationButton.addEventListener(
+  "click",
+  requestLocation
+);
+
+
+// ============================================================
+// REQUEST LOCATION
+// ============================================================
+
+function requestLocation() {
+
+  if (
+    !navigator.geolocation
+  ) {
+
+    useFallbackLocation();
+
+    return;
+
+  }
+
+
+  locationButton.disabled =
+    true;
+
+  locationButton.textContent =
+    "Requesting location...";
+
+
+  navigator.geolocation.getCurrentPosition(
+
+    function (position) {
+
+      const latitude =
+        position.coords.latitude;
+
+      const longitude =
+        position.coords.longitude;
+
+
+      console.log(
+        "REAL GPS LOCATION:",
+        latitude,
+        longitude
+      );
+
+
+      updateUserLocation(
+        latitude,
+        longitude
+      );
+
+
+      finishLocationSetup();
+
+
+      map.flyTo({
+
+        center:
+          userCoordinates,
+
+        zoom:
+          DEFAULT_ZOOM,
+
+        pitch:
+          DEFAULT_PITCH,
+
+        bearing:
+          DEFAULT_BEARING,
+
+        duration:
+          1000
+
+      });
+
+
+      startLocationTracking();
+
+    },
+
+
+    function (error) {
+
+      console.warn(
+        "GPS ERROR:",
+        error
+      );
+
+
+      useFallbackLocation();
+
+    },
+
+
+    {
+
+      enableHighAccuracy:
+        true,
+
+      timeout:
+        12000,
+
+      maximumAge:
+        0
+
+    }
+
+  );
+
+}
+
+
+// ============================================================
+// FALLBACK LOCATION
+// ============================================================
+
+function useFallbackLocation() {
+
+  userCoordinates =
+    [...FALLBACK_LOCATION];
+
+
+  createLocationMarker(
+    userCoordinates
+  );
+
+
+  finishLocationSetup();
+
+
+  map.flyTo({
+
+    center:
+      FALLBACK_LOCATION,
+
+    zoom:
+      DEFAULT_ZOOM,
+
+    pitch:
+      DEFAULT_PITCH,
+
+    bearing:
+      DEFAULT_BEARING,
+
+    duration:
+      800
+
+  });
+
+}
+
+
+// ============================================================
+// FINISH LOCATION SETUP
+// ============================================================
+
+function finishLocationSetup() {
+
+  locationScreen.classList.add(
+    "hidden"
+  );
+
+
+  showMapUI();
+
+
+  locationButton.disabled =
+    false;
+
+  locationButton.textContent =
+    "Allow location";
+
+}
+
+
+// ============================================================
+// LIVE LOCATION TRACKING
+// ============================================================
+
+function startLocationTracking() {
+
+  if (
+    !navigator.geolocation
+  ) {
+
+    return;
+
+  }
+
+
+  if (
+    locationWatchId !== null
+  ) {
+
+    navigator.geolocation.clearWatch(
+      locationWatchId
+    );
+
+  }
+
+
+  locationWatchId =
+    navigator.geolocation.watchPosition(
+
+      function (position) {
+
+        const latitude =
+          position.coords.latitude;
+
+        const longitude =
+          position.coords.longitude;
+
+
+        updateUserLocation(
+          latitude,
+          longitude
+        );
+
+
+        console.log(
+          "GPS UPDATED:",
+          latitude,
+          longitude
+        );
+
+      },
+
+
+      function (error) {
+
+        console.warn(
+          "GPS WATCH ERROR:",
+          error
+        );
+
+      },
+
+
+      {
+
+        enableHighAccuracy:
+          true,
+
+        maximumAge:
+          2000,
+
+        timeout:
+          10000
+
+      }
+
+    );
+
+}
+
+
+// ============================================================
+// MAP LOAD
+// ============================================================
+
+map.on(
+  "load",
+  function () {
+
+    console.log(
+      "MAP LOADED SUCCESSFULLY"
+    );
+
+
+    customizeMap();
+
+
+    createLocationMarker(
+      FALLBACK_LOCATION
+    );
+
+
+    map.resize();
+
+  }
+);
+
+
+// ============================================================
+// MAP CUSTOMIZATION
+// ============================================================
+
+function customizeMap() {
+
+  const layers =
+    map.getStyle().layers || [];
+
+
+  layers.forEach(
+    function (layer) {
+
+      const id =
+        layer.id?.toLowerCase() || "";
+
+      const sourceLayer =
+        layer["source-layer"]
+          ?.toLowerCase() || "";
+
+
+      // ------------------------------------------------------
+      // BUILDINGS
+      // ------------------------------------------------------
+
+      if (
+        id.includes("building") ||
+        sourceLayer.includes("building")
+      ) {
+
+        try {
+
+          map.setLayoutProperty(
+            layer.id,
+            "visibility",
+            "none"
+          );
+
+        }
+
+        catch (error) {}
+
+      }
+
+
+      // ------------------------------------------------------
+      // POI
+      // ------------------------------------------------------
+
+      if (
+        sourceLayer.includes("poi") ||
+        sourceLayer.includes("housenumber") ||
+        id.includes("poi") ||
+        id.includes("housenumber")
+      ) {
+
+        try {
+
+          map.setLayoutProperty(
+            layer.id,
+            "visibility",
+            "none"
+          );
+
+        }
+
+        catch (error) {}
+
+      }
+
+
+      // ------------------------------------------------------
+      // BACKGROUND
+      // ------------------------------------------------------
+
+      if (
+        layer.type === "background"
+      ) {
+
+        try {
+
+          map.setPaintProperty(
+            layer.id,
+            "background-color",
+            "#E3E5E7"
+          );
+
+        }
+
+        catch (error) {}
+
+      }
+
+
+      // ------------------------------------------------------
+      // LAND + WATER
+      // ------------------------------------------------------
+
+      if (
+        layer.type === "fill" ||
+        layer.type === "fill-extrusion"
+      ) {
+
+        try {
+
+          const isWater =
+            sourceLayer.includes("water") ||
+            id.includes("water") ||
+            id.includes("ocean") ||
+            id.includes("river") ||
+            id.includes("lake");
+
+
+          map.setPaintProperty(
+            layer.id,
+            "fill-color",
+
+            isWater
+              ? "#D8DBDE"
+              : "#E3E5E7"
+
+          );
+
+        }
+
+        catch (error) {}
+
+      }
+
+
+      // ------------------------------------------------------
+      // WATERWAYS
+      // ------------------------------------------------------
+
+      if (
+        layer.type === "line" &&
+        (
+          sourceLayer.includes("waterway") ||
+          id.includes("waterway")
+        )
+      ) {
+
+        try {
+
+          map.setPaintProperty(
+            layer.id,
+            "line-color",
+            "#D4D8DB"
+          );
+
+        }
+
+        catch (error) {}
+
+      }
+
+
+      // ------------------------------------------------------
+      // ROADS
+      // ------------------------------------------------------
+
+      if (
+        layer.type === "line" &&
+        sourceLayer === "transportation"
+      ) {
+
+        let width = 3;
+
+
+        if (
+          id.includes("minor") ||
+          id.includes("service") ||
+          id.includes("residential") ||
+          id.includes("street")
+        ) {
+
+          width = 2.5;
+
+        }
+
+
+        if (
+          id.includes("tertiary")
+        ) {
+
+          width = 5;
+
+        }
+
+
+        if (
+          id.includes("secondary")
+        ) {
+
+          width = 8;
+
+        }
+
+
+        if (
+          id.includes("primary")
+        ) {
+
+          width = 13;
+
+        }
+
+
+        if (
+          id.includes("trunk")
+        ) {
+
+          width = 17;
+
+        }
+
+
+        if (
+          id.includes("motorway")
+        ) {
+
+          width = 21;
+
+        }
+
+
+        try {
+
+          map.setPaintProperty(
+            layer.id,
+            "line-color",
+            "#FFFFFF"
+          );
+
+
+          map.setPaintProperty(
+            layer.id,
+            "line-width",
+            width
+          );
+
+        }
+
+        catch (error) {}
+
+      }
+
+
+      // ------------------------------------------------------
+      // ROAD LABELS
+      // ------------------------------------------------------
+
+      if (
+        layer.type === "symbol" &&
+        sourceLayer ===
+          "transportation_name"
+      ) {
+
+        try {
+
+          map.setPaintProperty(
+            layer.id,
+            "text-color",
+            "#5E6368"
+          );
+
+
+          map.setPaintProperty(
+            layer.id,
+            "text-halo-color",
+            "#E3E5E7"
+          );
+
+
+          map.setPaintProperty(
+            layer.id,
+            "text-halo-width",
+            1.2
+          );
+
+
+          if (
+            id.includes("motorway") ||
+            id.includes("trunk") ||
+            id.includes("primary")
+          ) {
+
+            map.setLayoutProperty(
+              layer.id,
+              "text-size",
+              14
+            );
+
+          }
+
+          else if (
+            id.includes("secondary") ||
+            id.includes("tertiary")
+          ) {
+
+            map.setLayoutProperty(
+              layer.id,
+              "text-size",
+              12
+            );
+
+          }
+
+          else {
+
+            map.setLayoutProperty(
+              layer.id,
+              "text-size",
+              10
+            );
+
+          }
+
+        }
+
+        catch (error) {}
+
+      }
+
+    }
+  );
+
+
+  // ----------------------------------------------------------
+  // ROAD NAME
+  // ----------------------------------------------------------
+
+  const roadLabels =
+    map.getStyle().layers.filter(
+      function (layer) {
+
+        return (
+          layer.type === "symbol" &&
+          layer["source-layer"] ===
+            "transportation_name"
+        );
+
+      }
+    );
+
+
+  roadLabels.forEach(
+    function (layer) {
+
+      try {
+
+        map.setLayoutProperty(
+          layer.id,
+          "text-field",
+          [
+            "case",
+
+            [
+              "==",
+              ["get", "name"],
+              "Old NH 47"
+            ],
+
+            "Palarivattom–Edappally Road",
+
+            ["get", "name"]
+
+          ]
+        );
+
+      }
+
+      catch (error) {}
+
+    }
+  );
+
+
+  // ----------------------------------------------------------
+  // MAP INTERACTION
+  // ----------------------------------------------------------
+
+  map.scrollZoom.enable();
+
+  map.dragPan.enable();
+
+  map.doubleClickZoom.enable();
+
+  map.touchZoomRotate.enable();
+
+  map.touchZoomRotate.enableRotation();
+
+  map.dragRotate.enable();
+
+  map.touchPitch.enable();
+
+  map.keyboard.disable();
+
+  map.boxZoom.disable();
+
+
+  // ----------------------------------------------------------
+  // CAMERA
+  // ----------------------------------------------------------
+
+  map.setPitch(
+    DEFAULT_PITCH
+  );
+
+  map.setBearing(
+    DEFAULT_BEARING
+  );
+
+
+  // ----------------------------------------------------------
+  // PADDING
+  // ----------------------------------------------------------
+
+  map.setPadding({
+
+    top: 180,
+
+    right: 0,
+
+    bottom: 0,
+
+    left: 0
+
+  });
+
+}
+
+
+// ============================================================
+// ZOOM OUT
+// ============================================================
+
+document
+  .getElementById("zoom-out")
+  .addEventListener(
+    "click",
+    function () {
+
+      if (!window.map) {
+
+        return;
+
+      }
+
+
+      window.map.zoomOut({
+
+        duration: 300
+
+      });
+
+    }
+  );
+
+
+// ============================================================
+// ZOOM IN / RETURN TO USER
+// ============================================================
+
+document
+  .getElementById("zoom-in")
+  .addEventListener(
+    "click",
+    function () {
+
+      if (!window.map) {
+
+        return;
+
+      }
+
+
+      window.map.easeTo({
+
+        center:
+          userCoordinates,
+
+        zoom:
+          DEFAULT_ZOOM,
+
+        pitch:
+          DEFAULT_PITCH,
+
+        bearing:
+          DEFAULT_BEARING,
+
+        duration:
+          500
+
+      });
+
+    }
+  );
+
+
+// ============================================================
+// INFO BUTTON
+// ============================================================
+
+infoButton.addEventListener(
+  "click",
+  function () {
+
+    console.log(
+      "Bus code information clicked."
+    );
+
+  }
+);
+
+
+// ============================================================
+// MAP ERROR
+// ============================================================
+
+map.on(
+  "error",
+  function (event) {
+
+    console.error(
+      "MAP ERROR:",
+      event
+    );
+
+  }
+);
